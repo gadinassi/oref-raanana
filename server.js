@@ -5,164 +5,122 @@ const path = require('path');
 
 const PORT = process.env.PORT || 3000;
 
+// ── פונקציה לשליפה מ-oref מצד השרת ──────────────────────
 function fetchOref(urlPath) {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'www.oref.org.il',
-      path: urlPath,
-      method: 'GET',
-      headers: {
-        'Host': 'www.oref.org.il',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding': 'identity',
-        'Referer': 'https://www.oref.org.il/12481-he/Pakar.aspx',
-        'Origin': 'https://www.oref.org.il',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Connection': 'keep-alive',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin',
-      },
-    };
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: 'www.oref.org.il',
+            path: urlPath,
+            method: 'GET',
+            headers: {
+                'Referer': 'https://www.oref.org.il/',
+                'X-Requested-With': 'XMLHttpRequest',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Connection': 'keep-alive'
+            },
+        };
 
-    const req = https.request(options, (res) => {
-      console.log(`[oref] ${urlPath} → HTTP ${res.statusCode} | CT: ${res.headers['content-type']}`);
+        const req = https.request(options, (res) => {
+            // אם הסטטוס הוא לא 200, סימן שיש חסימה או שגיאה
+            if (res.statusCode !== 200) {
+                return reject(new Error(`Oref returned status ${res.statusCode}`));
+            }
 
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        console.log(`[oref] redirect → ${res.headers.location}`);
-        const loc = res.headers.location;
-        const u = new URL(loc.startsWith('http') ? loc : `https://www.oref.org.il${loc}`);
-        const opts2 = { hostname: u.hostname, path: u.pathname + u.search, method: 'GET',
-          headers: options.headers };
-        const req2 = https.request(opts2, (res2) => {
-          let d = ''; res2.setEncoding('utf8');
-          res2.on('data', c => d += c);
-          res2.on('end', () => resolve(d));
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => resolve(data));
         });
-        req2.on('error', reject); req2.end(); return;
-      }
 
-      let data = '';
-      res.setEncoding('utf8');
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        if (data.trim().startsWith('<')) {
-          console.error(`[oref] HTML במקום JSON: ${data.substring(0, 300)}`);
-          reject(new Error('oref returned HTML (blocked)'));
-        } else {
-          resolve(data);
-        }
-      });
+        req.on('error', reject);
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Request timeout'));
+        });
+        
+        req.setTimeout(10000);
+        req.end();
     });
-
-    req.on('error', (e) => { console.error(`[oref] network error: ${e.message}`); reject(e); });
-    req.setTimeout(10000, () => { req.destroy(); reject(new Error('timeout')); });
-    req.end();
-  });
 }
 
-async function fetchCurrent() {
-  const paths = [
-    '/WarningMessages/alert/alerts.json',
-    '/alerts/alerts.json',
-  ];
-  for (const p of paths) {
+// פונקציית עזר לניסיון פארסינג בטוח
+function safeJSON(raw) {
     try {
-      const raw = await fetchOref(p);
-      return raw.trim() ? JSON.parse(raw) : null;
-    } catch (e) { console.log(`[current] failed ${p}: ${e.message}`); }
-  }
-  return null;
+        const trimmed = raw.trim();
+        // בדיקה אם זה נראה כמו HTML לפני הפארסינג
+        if (trimmed.startsWith('<')) {
+            throw new Error("Received HTML instead of JSON (Blocked by Oref)");
+        }
+        return trimmed ? JSON.parse(trimmed) : null;
+    } catch (e) {
+        throw new Error("JSON Parse Error: " + e.message);
+    }
 }
 
-async function fetchHistory() {
-  const paths = [
-    '/WarningMessages/History/AlertsHistory.json',
-    '/Shared/Ajax/GetAlertsHistory.aspx?lang=he',
-  ];
-  for (const p of paths) {
-    try {
-      const raw = await fetchOref(p);
-      if (!raw.trim()) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : (parsed.data || parsed.alerts || []);
-    } catch (e) { console.log(`[history] failed ${p}: ${e.message}`); }
-  }
-  return [];
-}
-
+// ── שרת HTTP ─────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Cache-Control', 'no-cache, no-store');
-  if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Cache-Control', 'no-cache, no-store');
 
-  const url = req.url.split('?')[0];
+    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
-  if (url === '/' || url === '/index.html') {
-    const tryFiles = [
-      path.join(__dirname, 'index.html'),
-      path.join(__dirname, 'public', 'index.html'),
-    ];
-    for (const f of tryFiles) {
-      if (fs.existsSync(f)) {
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.writeHead(200); res.end(fs.readFileSync(f)); return;
-      }
+    const url = req.url.split('?')[0];
+
+    // ── serve index.html ──────────────────────────────────
+    if (url === '/' || url === '/index.html') {
+        const file = path.join(__dirname, 'public', 'index.html');
+        fs.readFile(file, (err, content) => {
+            if (err) { 
+                res.writeHead(404); 
+                res.end('index.html not found - make sure you have a public folder'); 
+                return; 
+            }
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.writeHead(200);
+            res.end(content);
+        });
+        return;
     }
-    res.writeHead(404); res.end('index.html not found'); return;
-  }
 
-  if (url === '/api/current') {
-    try {
-      const data = await fetchCurrent();
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.writeHead(200);
-      res.end(JSON.stringify({ ok: true, data, ts: Date.now() }));
-    } catch (e) {
-      res.writeHead(502);
-      res.end(JSON.stringify({ ok: false, error: e.message }));
+    // ── API Endpoints ────────────────────────────────────
+    if (url === '/api/current' || url === '/api/history') {
+        const apiPath = url === '/api/current' 
+            ? '/WarningMessages/alert/alerts.json' 
+            : '/WarningMessages/History/AlertsHistory.json';
+
+        try {
+            const raw = await fetchOref(apiPath);
+            const data = safeJSON(raw);
+            
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.writeHead(200);
+            res.end(JSON.stringify({ ok: true, data, ts: Date.now() }));
+        } catch (e) {
+            console.error(`[${url}] Error:`, e.message);
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.writeHead(502); // Bad Gateway
+            res.end(JSON.stringify({ 
+                ok: false, 
+                error: "Pikud HaOref blocked the request or sent invalid data",
+                details: e.message 
+            }));
+        }
+        return;
     }
-    return;
-  }
 
-  if (url === '/api/history') {
-    try {
-      const data = await fetchHistory();
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.writeHead(200);
-      res.end(JSON.stringify({ ok: true, data, ts: Date.now() }));
-    } catch (e) {
-      res.writeHead(502);
-      res.end(JSON.stringify({ ok: false, error: e.message }));
+    if (url === '/health') {
+        res.writeHead(200);
+        res.end(JSON.stringify({ status: 'ok' }));
+        return;
     }
-    return;
-  }
 
-  if (url === '/health') {
-    res.writeHead(200);
-    res.end(JSON.stringify({ status: 'ok', ts: Date.now() }));
-    return;
-  }
-
-  if (url === '/debug') {
-    try {
-      const raw = await fetchOref('/WarningMessages/History/AlertsHistory.json');
-      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      res.writeHead(200);
-      res.end(`Length: ${raw.length}\nFirst 500:\n${raw.substring(0, 500)}`);
-    } catch (e) {
-      res.writeHead(500); res.end(`Error: ${e.message}`);
-    }
-    return;
-  }
-
-  res.writeHead(404); res.end('not found');
+    res.writeHead(404);
+    res.end('not found');
 });
 
 server.listen(PORT, () => {
-  console.log(`✅  שרת רעננה פועל על http://localhost:${PORT}`);
-  console.log(`📡  /api/current  /api/history  /health  /debug`);
+    console.log(`✅ שרת פועל על פורט ${PORT}`);
 });
