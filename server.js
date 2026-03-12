@@ -5,7 +5,10 @@ const path = require('path');
 
 const PORT = process.env.PORT || 3000;
 
-// ── פונקציה לשליפה מ-oref מצד השרת ──────────────────────
+/**
+ * פונקציה לשליפת נתונים מפיקוד העורף
+ * כולל Headers מתקדמים כדי לנסות לעקוף חסימות
+ */
 function fetchOref(urlPath) {
     return new Promise((resolve, reject) => {
         const options = {
@@ -13,53 +16,61 @@ function fetchOref(urlPath) {
             path: urlPath,
             method: 'GET',
             headers: {
-                'Referer': 'https://www.oref.org.il/',
+                'Referer': 'https://www.oref.org.il/he/alerts-history',
                 'X-Requested-With': 'XMLHttpRequest',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept': 'application/json, text/plain, */*',
                 'Accept-Language': 'he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Connection': 'keep-alive'
+                'Connection': 'keep-alive',
+                'Cache-Control': 'no-cache'
             },
         };
 
         const req = https.request(options, (res) => {
-            // אם הסטטוס הוא לא 200, סימן שיש חסימה או שגיאה
-            if (res.statusCode !== 200) {
-                return reject(new Error(`Oref returned status ${res.statusCode}`));
-            }
-
             let data = '';
             res.on('data', chunk => data += chunk);
-            res.on('end', () => resolve(data));
+            res.on('end', () => {
+                if (res.statusCode !== 200) {
+                    reject(new Error(`Oref Error: ${res.statusCode}`));
+                    return;
+                }
+                resolve(data);
+            });
         });
 
         req.on('error', reject);
-        req.on('timeout', () => {
-            req.destroy();
-            reject(new Error('Request timeout'));
-        });
-        
-        req.setTimeout(10000);
+        req.setTimeout(10000, () => { req.destroy(); reject(new Error('Timeout')); });
         req.end();
     });
 }
 
-// פונקציית עזר לניסיון פארסינג בטוח
-function safeJSON(raw) {
+/**
+ * פונקציה לעיבוד הנתונים וסינון רעננה
+ */
+function processRaananaData(rawData) {
     try {
-        const trimmed = raw.trim();
-        // בדיקה אם זה נראה כמו HTML לפני הפארסינג
+        const trimmed = rawData.trim();
+        // אם התו הראשון הוא <, זה אומר שקיבלנו דף HTML (חסימה) במקום JSON
         if (trimmed.startsWith('<')) {
-            throw new Error("Received HTML instead of JSON (Blocked by Oref)");
+            throw new Error("Blocked by Oref (HTML received)");
         }
-        return trimmed ? JSON.parse(trimmed) : null;
+        
+        const allAlerts = JSON.parse(trimmed);
+        if (!Array.isArray(allAlerts)) return [];
+
+        // סינון התראות שכוללות את המילה "רעננה"
+        const raananaAlerts = allAlerts.filter(alert => 
+            alert.data && alert.data.includes('רעננה')
+        );
+
+        return raananaAlerts;
     } catch (e) {
-        throw new Error("JSON Parse Error: " + e.message);
+        throw e;
     }
 }
 
-// ── שרת HTTP ─────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
+    // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -69,15 +80,11 @@ const server = http.createServer(async (req, res) => {
 
     const url = req.url.split('?')[0];
 
-    // ── serve index.html ──────────────────────────────────
+    // דף הבית
     if (url === '/' || url === '/index.html') {
         const file = path.join(__dirname, 'public', 'index.html');
         fs.readFile(file, (err, content) => {
-            if (err) { 
-                res.writeHead(404); 
-                res.end('index.html not found - make sure you have a public folder'); 
-                return; 
-            }
+            if (err) { res.writeHead(404); res.end('index.html not found'); return; }
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             res.writeHead(200);
             res.end(content);
@@ -85,42 +92,67 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // ── API Endpoints ────────────────────────────────────
-    if (url === '/api/current' || url === '/api/history') {
-        const apiPath = url === '/api/current' 
-            ? '/WarningMessages/alert/alerts.json' 
-            : '/WarningMessages/History/AlertsHistory.json';
-
+    // API: התראות אחרונות ברעננה
+    if (url === '/api/history') {
         try {
-            const raw = await fetchOref(apiPath);
-            const data = safeJSON(raw);
-            
+            const raw = await fetchOref('/WarningMessages/History/AlertsHistory.json');
+            const alerts = processRaananaData(raw);
+
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.writeHead(200);
-            res.end(JSON.stringify({ ok: true, data, ts: Date.now() }));
+            res.end(JSON.stringify({
+                ok: true,
+                count: alerts.length,
+                lastAlert: alerts.length > 0 ? alerts[0] : null, // ההתראה האחרונה ביותר
+                data: alerts,
+                ts: Date.now()
+            }));
         } catch (e) {
-            console.error(`[${url}] Error:`, e.message);
-            res.setHeader('Content-Type', 'application/json; charset=utf-8');
-            res.writeHead(502); // Bad Gateway
+            console.error('[/api/history] error:', e.message);
+            res.writeHead(502);
             res.end(JSON.stringify({ 
                 ok: false, 
-                error: "Pikud HaOref blocked the request or sent invalid data",
+                error: "Unable to fetch from Oref",
                 details: e.message 
             }));
         }
         return;
     }
 
+    // API: בדיקת התראה פעילה כרגע ברעננה
+    if (url === '/api/current') {
+        try {
+            const raw = await fetchOref('/WarningMessages/alert/alerts.json');
+            const data = (raw.trim() && !raw.trim().startsWith('<')) ? JSON.parse(raw) : null;
+            
+            // בדיקה אם רעננה נמצאת בתוך רשימת הערים הפעילות
+            const isRaananaActive = data && data.data && data.data.some(city => city.includes('רעננה'));
+
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.writeHead(200);
+            res.end(JSON.stringify({ 
+                ok: true, 
+                active: !!isRaananaActive, 
+                raw: isRaananaActive ? data : null 
+            }));
+        } catch (e) {
+            res.writeHead(200); // מחזירים 200 כדי לא לשבור את הקליינט, פשוט בלי דאטה
+            res.end(JSON.stringify({ ok: false, active: false }));
+        }
+        return;
+    }
+
+    // Health check
     if (url === '/health') {
         res.writeHead(200);
-        res.end(JSON.stringify({ status: 'ok' }));
+        res.end('OK');
         return;
     }
 
     res.writeHead(404);
-    res.end('not found');
+    res.end('Not Found');
 });
 
 server.listen(PORT, () => {
-    console.log(`✅ שרת פועל על פורט ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
