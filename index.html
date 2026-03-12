@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מקלט רעננה – מצב בטחוני</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --panel: #12151c;
+    --border: #1e2530;
+    --text: #c8d0dc;
+    --muted: #4a5568;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --red: #ef4444;
+    --green-glow: rgba(34,197,94,0.35);
+    --yellow-glow: rgba(234,179,8,0.35);
+    --red-glow: rgba(239,68,68,0.35);
+    --state: var(--green);
+    --state-glow: var(--green-glow);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Heebo', sans-serif;
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 16px 40px; gap: 20px;
+    overflow-x: hidden;
+  }
+  /* ── Header ── */
+  .header {
+    width:100%; max-width:520px;
+    display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--border); padding-bottom:14px;
+  }
+  .header-title { font-size:1.1rem; font-weight:700; }
+  .header-sub   { font-size:.75rem; color:var(--muted); margin-top:2px; }
+  .logo-shield  {
+    width:40px; height:40px; background:var(--panel);
+    border:1px solid var(--border); border-radius:8px;
+    display:flex; align-items:center; justify-content:center; font-size:20px;
+  }
+  /* ── Traffic light ── */
+  .traffic-card {
+    width:100%; max-width:520px;
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:20px; padding:28px 24px 24px;
+    display:flex; flex-direction:column; align-items:center; gap:22px;
+    position:relative; overflow:hidden;
+  }
+  .traffic-card::before {
+    content:''; position:absolute; inset:0;
+    background:radial-gradient(ellipse at 50% 20%, var(--state-glow) 0%, transparent 70%);
+    transition:background .8s; pointer-events:none;
+  }
+  .light-housing {
+    background:#0d0f14; border:2px solid #1a1e28;
+    border-radius:52px; padding:16px 12px;
+    display:flex; flex-direction:column; gap:14px;
+    box-shadow:inset 0 2px 8px rgba(0,0,0,.6);
+  }
+  .light-bulb {
+    width:72px; height:72px; border-radius:50%;
+    border:3px solid rgba(255,255,255,.06);
+    transition:background .5s, box-shadow .5s;
+  }
+  .light-bulb.red-bulb    { background:#2a0a0a; }
+  .light-bulb.yellow-bulb { background:#2a1e00; }
+  .light-bulb.green-bulb  { background:#0a2010; }
+  .light-bulb.active.red-bulb {
+    background:var(--red);
+    box-shadow:0 0 28px 12px var(--red-glow),0 0 8px 4px var(--red);
+    animation:pulse-red 1s ease-in-out infinite alternate;
+  }
+  .light-bulb.active.yellow-bulb {
+    background:var(--yellow);
+    box-shadow:0 0 28px 12px var(--yellow-glow),0 0 8px 4px var(--yellow);
+    animation:pulse-yellow 1.4s ease-in-out infinite alternate;
+  }
+  .light-bulb.active.green-bulb {
+    background:var(--green);
+    box-shadow:0 0 28px 12px var(--green-glow),0 0 8px 4px var(--green);
+  }
+  @keyframes pulse-red {
+    from { box-shadow:0 0 28px 12px rgba(239,68,68,.35),0 0 8px 4px var(--red); }
+    to   { box-shadow:0 0 44px 20px rgba(239,68,68,.6), 0 0 14px 6px var(--red); }
+  }
+  @keyframes pulse-yellow {
+    from { box-shadow:0 0 28px 12px rgba(234,179,8,.3), 0 0 8px 4px var(--yellow); }
+    to   { box-shadow:0 0 44px 20px rgba(234,179,8,.55),0 0 14px 6px var(--yellow); }
+  }
+  .status-block { text-align:center; }
+  .status-label {
+    font-size:2rem; font-weight:900;
+    color:var(--state); transition:color .5s;
+    text-shadow:0 0 20px var(--state-glow);
+  }
+  .status-sub { font-size:.85rem; color:var(--muted); margin-top:4px; }
+  /* ── Info grid ── */
+  .info-grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:10px;
+    width:100%; max-width:520px;
+  }
+  .info-card {
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:14px; padding:14px 16px;
+  }
+  .info-card-label { font-size:.72rem; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; margin-bottom:4px; }
+  .info-card-value { font-family:'Share Tech Mono',monospace; font-size:1.3rem; }
+  .info-card-value.hi { color:var(--state); transition:color .5s; }
+  /* ── Shelter timer ── */
+  .shelter-timer {
+    width:100%; max-width:520px;
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:14px; padding:14px 16px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .shelter-label { font-size:.72rem; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; margin-bottom:4px; }
+  .shelter-value { font-family:'Share Tech Mono',monospace; font-size:1.6rem; color:var(--yellow); }
+  .shelter-sub   { font-size:.75rem; color:var(--muted); }
+  /* ── Alert list ── */
+  .alert-detail {
+    width:100%; max-width:520px;
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:14px; padding:16px;
+  }
+  .alert-detail-title {
+    font-size:.72rem; color:var(--muted); letter-spacing:.08em;
+    text-transform:uppercase; margin-bottom:10px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .badge { background:#1e2530; padding:2px 8px; border-radius:20px; font-size:.78rem; }
+  .alert-item {
+    display:flex; align-items:flex-start; gap:10px;
+    padding:8px 0; border-bottom:1px solid var(--border); font-size:.88rem;
+  }
+  .alert-item:last-child { border-bottom:none; }
+  .alert-dot { width:8px; height:8px; border-radius:50%; background:var(--red); flex-shrink:0; margin-top:5px; }
+  .alert-city { font-weight:700; }
+  .alert-time { font-family:'Share Tech Mono',monospace; font-size:.78rem; color:var(--muted); margin-top:2px; }
+  .no-alerts  { color:var(--muted); font-size:.88rem; padding:8px 0; text-align:center; }
+  /* ── Config banner ── */
+  .config-banner {
+    width:100%; max-width:520px;
+    background:#1a1000; border:1px solid #3d2800;
+    border-radius:12px; padding:12px 16px;
+    font-size:.82rem; color:#f59e0b; line-height:1.6;
+    display:none;
+  }
+  .config-banner code {
+    background:#2d1f00; padding:2px 6px; border-radius:4px;
+    font-family:'Share Tech Mono',monospace; font-size:.8rem;
+  }
+  /* ── Status bar ── */
+  .statusbar {
+    width:100%; max-width:520px;
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:.72rem; color:var(--muted); font-family:'Share Tech Mono',monospace;
+  }
+  .dot-live { width:6px; height:6px; border-radius:50%; background:var(--green); display:inline-block; margin-left:5px; animation:blink 2s ease-in-out infinite; }
+  .dot-live.offline { background:var(--red); animation:none; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+</style>
+</head>
+<body>
+
+<!-- ───── CONFIG: שנה את הכתובת לכתובת ה-Render שלך ───── -->
+<script>
+  // אחרי שתעלה ל-Render, שנה את השורה הזו לכתובת שלך:
+  // לדוגמה: const API_BASE = 'https://oref-raanana.onrender.com';
+  // בסביבה מקומית השאר ריק – ישתמש ב-/api/* אוטומטית
+  const API_BASE = window.__API_BASE__ || '';
+</script>
+<!-- ──────────────────────────────────────────────────── -->
+
+<div class="header">
+  <div>
+    <div class="header-title">מקלט רעננה 🏠</div>
+    <div class="header-sub">מצב בטחוני בזמן אמת · פיקוד העורף</div>
+  </div>
+  <div class="logo-shield">🛡️</div>
+</div>
+
+<!-- Config banner – shown only if API_BASE not set in prod -->
+<div class="config-banner" id="configBanner">
+  ⚙️ <strong>הגדרה נדרשת:</strong> ערוך את <code>index.html</code> ושנה את <code>API_BASE</code>
+  לכתובת ה-Render שלך (ראה <code>README.md</code>).
+</div>
+
+<div class="traffic-card" id="mainCard">
+  <div class="light-housing">
+    <div class="light-bulb red-bulb"    id="bulbRed"></div>
+    <div class="light-bulb yellow-bulb" id="bulbYellow"></div>
+    <div class="light-bulb green-bulb active" id="bulbGreen"></div>
+  </div>
+  <div class="status-block">
+    <div class="status-label" id="statusLabel">ניתן לצאת</div>
+    <div class="status-sub"   id="statusSub">אין התראות פעילות באזור</div>
+  </div>
+</div>
+
+<div class="info-grid">
+  <div class="info-card">
+    <div class="info-card-label">שעה נוכחית</div>
+    <div class="info-card-value" id="clockVal">--:--:--</div>
+  </div>
+  <div class="info-card">
+    <div class="info-card-label">עדכון אחרון</div>
+    <div class="info-card-value hi" id="lastUpdateVal">--:--</div>
+  </div>
+  <div class="info-card">
+    <div class="info-card-label">התראות אחרונות</div>
+    <div class="info-card-value hi" id="todayCount">0</div>
+  </div>
+  <div class="info-card">
+    <div class="info-card-label">סקירה הבאה</div>
+    <div class="info-card-value" id="nextPollVal">60 שנ׳</div>
+  </div>
+</div>
+
+<div class="shelter-timer" id="shelterBox" style="display:none">
+  <div>
+    <div class="shelter-label">⏱ זמן שהייה במקלט</div>
+    <div class="shelter-value" id="shelterDwell">00:00</div>
+    <div class="shelter-sub">מאז ההתראה האחרונה</div>
+  </div>
+  <div style="font-size:2.5rem">🏃</div>
+</div>
+
+<div class="alert-detail">
+  <div class="alert-detail-title">
+    <span>התראות אחרונות – רעננה</span>
+    <span class="badge" id="alertBadge">טוען...</span>
+  </div>
+  <div id="alertList"><div class="no-alerts">מתחבר לשרת...</div></div>
+</div>
+
+<div class="statusbar">
+  <span><span class="dot-live" id="liveDot"></span><span id="connStatus">מתחבר...</span></span>
+  <span id="sourceLabel">oref.org.il</span>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────
+// הגדרות
+// ─────────────────────────────────────────────────────
+const CITY        = 'רעננה';
+const SHELTER_SEC = 90;      // זמן שהייה מומלץ בשניות
+const POLL_MS     = 60_000;  // דגימה כל דקה
+
+// ─────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────
+let shelterEnteredAt = null;
+let pollCountdown    = 60;
+let todayCount       = 0;
+let countdownTimer   = null;
+
+// DOM refs
+const $ = id => document.getElementById(id);
+const bulbRed    = $('bulbRed');
+const bulbYellow = $('bulbYellow');
+const bulbGreen  = $('bulbGreen');
+
+// ── שעון ──────────────────────────────────────────────
+setInterval(() => {
+  $('clockVal').textContent = new Date().toLocaleTimeString('he-IL');
+}, 1000);
+
+// ── ספירה לאחור לסקירה הבאה ──────────────────────────
+function startCountdown() {
+  clearInterval(countdownTimer);
+  pollCountdown = 60;
+  countdownTimer = setInterval(() => {
+    pollCountdown = Math.max(0, pollCountdown - 1);
+    $('nextPollVal').textContent = `${pollCountdown} שנ׳`;
+  }, 1000);
+}
+
+// ── טיימר שהייה במקלט ────────────────────────────────
+setInterval(() => {
+  if (!shelterEnteredAt) return;
+  const sec = Math.floor((Date.now() - shelterEnteredAt) / 1000);
+  const mm = String(Math.floor(sec / 60)).padStart(2,'0');
+  const ss = String(sec % 60).padStart(2,'0');
+  $('shelterDwell').textContent = `${mm}:${ss}`;
+}, 1000);
+
+// ── עדכון רמזור ───────────────────────────────────────
+function setState(state) {
+  bulbRed.classList.remove('active');
+  bulbYellow.classList.remove('active');
+  bulbGreen.classList.remove('active');
+  const root = document.documentElement;
+
+  if (state === 'red') {
+    bulbRed.classList.add('active');
+    $('statusLabel').textContent = 'היכנסו למקלט!';
+    $('statusSub').textContent   = 'התראת צבע אדום – רעננה';
+    root.style.setProperty('--state',      'var(--red)');
+    root.style.setProperty('--state-glow', 'var(--red-glow)');
+    if (!shelterEnteredAt) shelterEnteredAt = Date.now();
+    $('shelterBox').style.display = 'flex';
+  } else if (state === 'yellow') {
+    bulbYellow.classList.add('active');
+    $('statusLabel').textContent = 'להתכונן';
+    $('statusSub').textContent   = `היו קרובים למקלט · ${SHELTER_SEC} שניות`;
+    root.style.setProperty('--state',      'var(--yellow)');
+    root.style.setProperty('--state-glow', 'var(--yellow-glow)');
+    $('shelterBox').style.display = 'flex';
+  } else {
+    bulbGreen.classList.add('active');
+    $('statusLabel').textContent = 'ניתן לצאת';
+    $('statusSub').textContent   = 'אין התראות פעילות באזור';
+    root.style.setProperty('--state',      'var(--green)');
+    root.style.setProperty('--state-glow', 'var(--green-glow)');
+    shelterEnteredAt = null;
+    $('shelterBox').style.display = 'none';
+  }
+}
+
+// ── הצגת רשימת התראות ────────────────────────────────
+function renderAlerts(alerts) {
+  const ra = (alerts || []).filter(a => a.data && a.data.includes(CITY));
+  todayCount = ra.length;
+  $('todayCount').textContent = todayCount;
+  $('alertBadge').textContent = `${ra.length} התראות`;
+
+  if (!ra.length) {
+    $('alertList').innerHTML = `<div class="no-alerts">אין התראות אחרונות עבור רעננה ✓</div>`;
+    return;
+  }
+
+  $('alertList').innerHTML = ra.slice(0, 10).map(a => `
+    <div class="alert-item">
+      <div class="alert-dot"></div>
+      <div>
+        <div class="alert-city">${a.data}</div>
+        <div class="alert-time">${a.date || ''} ${a.time || ''}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── לוגיקת מצב ────────────────────────────────────────
+function process(currentAlert, history) {
+  renderAlerts(history);
+
+  // האם יש התראה פעילה עכשיו?
+  if (currentAlert && currentAlert.data) {
+    const cities = Array.isArray(currentAlert.data)
+      ? currentAlert.data : [currentAlert.data];
+    if (cities.some(c => c.includes(CITY))) {
+      setState('red');
+      return;
+    }
+  }
+
+  // האם הייתה התראה ב-SHELTER_SEC האחרונות?
+  const ra = (history || []).filter(a => a.data && a.data.includes(CITY));
+  if (ra.length) {
+    const latest = ra[0];
+    const ts = latest.alertDate
+      ? new Date(latest.alertDate).getTime()
+      : (latest.date && latest.time
+          ? new Date(`${latest.date}T${latest.time}`).getTime()
+          : null);
+    if (ts && (Date.now() - ts) / 1000 < SHELTER_SEC) {
+      setState('yellow');
+      if (!shelterEnteredAt) shelterEnteredAt = ts;
+      return;
+    }
+  }
+
+  setState('green');
+}
+
+// ── דגימה מהשרת ───────────────────────────────────────
+async function poll() {
+  $('lastUpdateVal').textContent = new Date().toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
+  startCountdown();
+
+  try {
+    const [curRes, histRes] = await Promise.all([
+      fetch(`${API_BASE}/api/current`),
+      fetch(`${API_BASE}/api/history`),
+    ]);
+
+    if (!curRes.ok || !histRes.ok) throw new Error(`HTTP ${curRes.status}`);
+
+    const cur  = await curRes.json();
+    const hist = await histRes.json();
+
+    $('liveDot').classList.remove('offline');
+    $('connStatus').textContent = '✅ מחובר · oref.org.il';
+    $('sourceLabel').textContent = API_BASE ? new URL(API_BASE).hostname : 'localhost';
+
+    process(cur.data, hist.data || []);
+  } catch (e) {
+    $('liveDot').classList.add('offline');
+    $('connStatus').textContent = `❌ ${e.message}`;
+    console.error('Poll error:', e);
+  }
+}
+
+// ── הפעלה ─────────────────────────────────────────────
+if (!API_BASE) {
+  // Running locally – no banner needed, relative URLs work
+  document.getElementById('configBanner').style.display = 'none';
+}
+
+poll();
+setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>
